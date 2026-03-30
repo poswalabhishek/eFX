@@ -18,74 +18,23 @@ def set_bridge(bridge: ZmqBridge):
     _bridge = bridge
 
 
-class ConnectionManager:
-    def __init__(self):
-        self.price_connections: list[WebSocket] = []
-        self.pnl_connections: list[WebSocket] = []
-        self.alert_connections: list[WebSocket] = []
-
-    async def connect_prices(self, ws: WebSocket):
-        await ws.accept()
-        self.price_connections.append(ws)
-        logger.info(f"Price client connected. Total: {len(self.price_connections)}")
-
-    async def connect_pnl(self, ws: WebSocket):
-        await ws.accept()
-        self.pnl_connections.append(ws)
-
-    async def connect_alerts(self, ws: WebSocket):
-        await ws.accept()
-        self.alert_connections.append(ws)
-
-    def disconnect_prices(self, ws: WebSocket):
-        if ws in self.price_connections:
-            self.price_connections.remove(ws)
-
-    def disconnect_pnl(self, ws: WebSocket):
-        if ws in self.pnl_connections:
-            self.pnl_connections.remove(ws)
-
-    def disconnect_alerts(self, ws: WebSocket):
-        if ws in self.alert_connections:
-            self.alert_connections.remove(ws)
-
-    async def broadcast_prices(self, data: dict):
-        msg = json.dumps(data)
-        dead = []
-        for ws in self.price_connections:
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.disconnect_prices(ws)
-
-    async def broadcast_pnl(self, data: dict):
-        msg = json.dumps(data)
-        dead = []
-        for ws in self.pnl_connections:
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.disconnect_pnl(ws)
-
-
-manager = ConnectionManager()
-
-
 @router.websocket("/prices")
 async def price_stream(websocket: WebSocket):
-    """Stream real-time fair value prices from the C++ engine via ZMQ."""
-    await manager.connect_prices(websocket)
+    """Stream all dashboard data: prices, PnL, positions, venues, alerts."""
+    await websocket.accept()
+    logger.info(f"Dashboard client connected. Bridge: {_bridge is not None}")
     try:
         while True:
             if _bridge and _bridge.latest_fair_values:
                 snapshot = {
-                    "type": "prices",
+                    "type": "dashboard",
                     "timestamp": time.time(),
-                    "pairs": _bridge.latest_fair_values,
+                    "prices": _bridge.latest_fair_values,
+                    "pnl": _bridge.state.get_pnl_snapshot(),
+                    "positions": _bridge.state.get_positions(),
+                    "venues": _bridge.state.get_venue_stats(),
+                    "alerts": _bridge.state.get_recent_alerts(10),
+                    "engine_connected": True,
                 }
                 await websocket.send_json(snapshot)
             else:
@@ -94,36 +43,36 @@ async def price_stream(websocket: WebSocket):
                     "timestamp": time.time(),
                     "engine_connected": _bridge is not None and _bridge.message_count > 0,
                 })
-            await asyncio.sleep(0.1)  # 10 Hz to frontend
+            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
-        manager.disconnect_prices(websocket)
+        logger.info("Dashboard client disconnected")
+    except Exception as e:
+        logger.error(f"WS error: {e}")
 
 
 @router.websocket("/pnl")
 async def pnl_stream(websocket: WebSocket):
-    """Stream real-time PnL updates."""
-    await manager.connect_pnl(websocket)
+    await websocket.accept()
     try:
         while True:
-            await websocket.send_json({
-                "type": "heartbeat",
-                "timestamp": time.time(),
-            })
-            await asyncio.sleep(1)
+            if _bridge:
+                await websocket.send_json(_bridge.state.get_pnl_snapshot())
+            await asyncio.sleep(0.5)
     except WebSocketDisconnect:
-        manager.disconnect_pnl(websocket)
+        pass
 
 
 @router.websocket("/alerts")
 async def alert_stream(websocket: WebSocket):
-    """Stream real-time alerts."""
-    await manager.connect_alerts(websocket)
+    await websocket.accept()
     try:
         while True:
-            await websocket.send_json({
-                "type": "heartbeat",
-                "timestamp": time.time(),
-            })
-            await asyncio.sleep(5)
+            if _bridge:
+                await websocket.send_json({
+                    "type": "alerts",
+                    "alerts": _bridge.state.get_recent_alerts(20),
+                    "timestamp": time.time(),
+                })
+            await asyncio.sleep(2)
     except WebSocketDisconnect:
-        manager.disconnect_alerts(websocket)
+        pass

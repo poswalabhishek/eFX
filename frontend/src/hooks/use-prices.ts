@@ -1,20 +1,62 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { FairValue } from "@/types/market";
+import type { FairValue, AlertSeverity } from "@/types/market";
 
 const WS_URL = "ws://localhost:8000/ws/prices";
 
-interface PriceState {
+export interface PnlData {
+  total: number;
+  spread_pnl: number;
+  position_pnl: number;
+  hedge_cost: number;
+  peak: number;
+  drawdown: number;
+}
+
+export interface PositionData {
+  pair: string;
+  position: number;
+  unrealized_pnl: number;
+}
+
+export interface VenueData {
+  venue: string;
+  volume: string;
+  ranking: number;
+  pnl: number;
+  market_share: number;
+}
+
+export interface AlertData {
+  id: string;
+  severity: AlertSeverity;
+  message: string;
+  timestamp: number;
+}
+
+interface DashboardState {
   pairs: Record<string, FairValue>;
+  pnl: PnlData;
+  positions: PositionData[];
+  venues: VenueData[];
+  alerts: AlertData[];
   connected: boolean;
   engineConnected: boolean;
   lastUpdate: number;
 }
 
-export function usePrices(): PriceState {
-  const [state, setState] = useState<PriceState>({
+const EMPTY_PNL: PnlData = {
+  total: 0, spread_pnl: 0, position_pnl: 0, hedge_cost: 0, peak: 0, drawdown: 0,
+};
+
+export function useDashboard(): DashboardState {
+  const [state, setState] = useState<DashboardState>({
     pairs: {},
+    pnl: EMPTY_PNL,
+    positions: [],
+    venues: [],
+    alerts: [],
     connected: false,
     engineConnected: false,
     lastUpdate: 0,
@@ -36,22 +78,30 @@ export function usePrices(): PriceState {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "prices" && data.pairs) {
-          const pairs: Record<string, FairValue> = {};
-          for (const [pair, fv] of Object.entries(data.pairs)) {
-            const raw = fv as Record<string, unknown>;
-            pairs[pair] = {
-              pair,
-              mid: raw.mid as number,
-              confidence: raw.confidence as number,
-              volatility: raw.volatility as number,
-              num_venues: raw.num_venues as number,
-              timestamp: raw.timestamp as number,
-            };
+
+        if (data.type === "dashboard") {
+          const prices: Record<string, FairValue> = {};
+          if (data.prices) {
+            for (const [pair, fv] of Object.entries(data.prices)) {
+              const raw = fv as Record<string, unknown>;
+              prices[pair] = {
+                pair,
+                mid: raw.mid as number,
+                confidence: raw.confidence as number,
+                volatility: raw.volatility as number,
+                num_venues: raw.num_venues as number,
+                timestamp: raw.timestamp as number,
+              };
+            }
           }
+
           setState((prev) => ({
             ...prev,
-            pairs,
+            pairs: prices,
+            pnl: data.pnl ?? prev.pnl,
+            positions: data.positions ?? prev.positions,
+            venues: data.venues ?? prev.venues,
+            alerts: data.alerts ?? prev.alerts,
             engineConnected: true,
             lastUpdate: Date.now(),
           }));
@@ -62,7 +112,7 @@ export function usePrices(): PriceState {
           }));
         }
       } catch {
-        // ignore malformed messages
+        // ignore parse errors
       }
     };
 

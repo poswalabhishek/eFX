@@ -1,6 +1,6 @@
 "use client";
 
-import { usePrices } from "@/hooks/use-prices";
+import { useDashboard } from "@/hooks/use-prices";
 import { useClients } from "@/hooks/use-clients";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { PriceTiles } from "@/components/dashboard/price-tiles";
@@ -11,7 +11,8 @@ import { ClientAlphaTable } from "@/components/dashboard/client-alpha-table";
 import { AlertFeed } from "@/components/dashboard/alert-feed";
 
 export default function DashboardPage() {
-  const { pairs, connected, engineConnected } = usePrices();
+  const { pairs, pnl, positions, venues, alerts, connected, engineConnected } =
+    useDashboard();
   const { clients, tiers, updateClientTier } = useClients();
 
   return (
@@ -22,28 +23,28 @@ export default function DashboardPage() {
       />
       <main className="flex-1 overflow-auto p-4 bg-muted/30">
         <div className="grid grid-cols-12 gap-4">
-          {/* Left column: PnL + Positions */}
+          {/* Left column */}
           <div className="col-span-4 flex flex-col gap-4">
-            <PnlPanel />
-            <PositionsGrid />
+            <PnlPanel pnl={pnl} />
+            <PositionsGrid positions={positions} />
           </div>
 
-          {/* Center column: Live Prices + Client Alpha */}
+          {/* Center column */}
           <div className="col-span-4 flex flex-col gap-4">
             <PriceTiles prices={pairs} />
             <ClientAlphaTable
               clients={clients}
               tiers={tiers}
               onTierChange={(clientId, tier) =>
-                updateClientTier(clientId, tier, "Manual adjustment from dashboard")
+                updateClientTier(clientId, tier, "Manual adjustment")
               }
             />
           </div>
 
-          {/* Right column: Venue Performance + Alerts */}
+          {/* Right column */}
           <div className="col-span-4 flex flex-col gap-4">
-            <VenueBoard />
-            <AlertFeed />
+            <VenueBoard venues={venues} />
+            <AlertFeed alerts={alerts} />
           </div>
         </div>
       </main>

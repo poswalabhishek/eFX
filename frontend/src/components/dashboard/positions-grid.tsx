@@ -9,21 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-interface PositionRow {
-  pair: string;
-  position: number;
-  unrealized_pnl: number;
-}
-
-const MOCK_POSITIONS: PositionRow[] = [
-  { pair: "EURUSD", position: 2_500_000, unrealized_pnl: 1_200 },
-  { pair: "USDJPY", position: -5_000_000, unrealized_pnl: -3_400 },
-  { pair: "GBPUSD", position: 1_000_000, unrealized_pnl: 500 },
-  { pair: "AUDUSD", position: -750_000, unrealized_pnl: -180 },
-  { pair: "USDCHF", position: 0, unrealized_pnl: 0 },
-  { pair: "USDCAD", position: 3_200_000, unrealized_pnl: 890 },
-];
+import type { PositionData } from "@/hooks/use-prices";
 
 function formatAmount(value: number): string {
   if (Math.abs(value) >= 1_000_000) {
@@ -32,14 +18,15 @@ function formatAmount(value: number): string {
   if (Math.abs(value) >= 1_000) {
     return `${(value / 1_000).toFixed(0)}K`;
   }
-  return value.toString();
+  return value.toFixed(0);
 }
 
-export function PositionsGrid() {
-  const netExposure = MOCK_POSITIONS.reduce(
-    (sum, p) => sum + p.unrealized_pnl,
-    0,
-  );
+interface PositionsGridProps {
+  positions: PositionData[];
+}
+
+export function PositionsGrid({ positions }: PositionsGridProps) {
+  const netExposure = positions.reduce((sum, p) => sum + p.unrealized_pnl, 0);
 
   return (
     <Card className="p-4 gap-0">
@@ -52,7 +39,7 @@ export function PositionsGrid() {
             netExposure >= 0 ? "text-emerald-500" : "text-red-500"
           }`}
         >
-          Net: ${netExposure.toLocaleString()}
+          Net: ${netExposure.toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </span>
       </div>
 
@@ -65,37 +52,45 @@ export function PositionsGrid() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {MOCK_POSITIONS.map((p) => (
-            <TableRow key={p.pair}>
-              <TableCell className="font-mono text-sm font-medium">
-                {p.pair}
-              </TableCell>
-              <TableCell
-                className={`text-right font-mono text-sm ${
-                  p.position > 0
-                    ? "text-emerald-500"
-                    : p.position < 0
-                      ? "text-red-500"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {p.position === 0 ? "FLAT" : formatAmount(p.position)}
-              </TableCell>
-              <TableCell
-                className={`text-right font-mono text-sm ${
-                  p.unrealized_pnl > 0
-                    ? "text-emerald-500"
-                    : p.unrealized_pnl < 0
-                      ? "text-red-500"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {p.unrealized_pnl === 0
-                  ? "-"
-                  : `$${p.unrealized_pnl.toLocaleString()}`}
+          {positions.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={3} className="text-center text-xs text-muted-foreground">
+                Waiting for data...
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            positions.map((p) => (
+              <TableRow key={p.pair}>
+                <TableCell className="font-mono text-sm font-medium">
+                  {p.pair}
+                </TableCell>
+                <TableCell
+                  className={`text-right font-mono text-sm ${
+                    p.position > 0
+                      ? "text-emerald-500"
+                      : p.position < 0
+                        ? "text-red-500"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {p.position === 0 ? "FLAT" : formatAmount(p.position)}
+                </TableCell>
+                <TableCell
+                  className={`text-right font-mono text-sm ${
+                    p.unrealized_pnl > 0
+                      ? "text-emerald-500"
+                      : p.unrealized_pnl < 0
+                        ? "text-red-500"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {p.unrealized_pnl === 0
+                    ? "-"
+                    : `$${p.unrealized_pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </Card>

@@ -1,23 +1,18 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-
-const MOCK_PNL = {
-  total: 125_400,
-  spread: 98_000,
-  position: 32_400,
-  hedge: -5_000,
-  peak: 142_000,
-  drawdown: -16_600,
-};
+import type { PnlData } from "@/hooks/use-prices";
 
 function formatCurrency(value: number): string {
   const prefix = value >= 0 ? "+$" : "-$";
-  return `${prefix}${Math.abs(value).toLocaleString()}`;
+  return `${prefix}${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-export function PnlPanel() {
-  const pnl = MOCK_PNL;
+interface PnlPanelProps {
+  pnl: PnlData;
+}
+
+export function PnlPanel({ pnl }: PnlPanelProps) {
   const isPositive = pnl.total >= 0;
 
   return (
@@ -42,24 +37,24 @@ export function PnlPanel() {
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div>
           <p className="text-xs text-muted-foreground">Spread</p>
-          <p className="text-sm font-mono tabular-nums text-emerald-500">
-            {formatCurrency(pnl.spread)}
+          <p className={`text-sm font-mono tabular-nums ${pnl.spread_pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+            {formatCurrency(pnl.spread_pnl)}
           </p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Position</p>
           <p
             className={`text-sm font-mono tabular-nums ${
-              pnl.position >= 0 ? "text-emerald-500" : "text-red-500"
+              pnl.position_pnl >= 0 ? "text-emerald-500" : "text-red-500"
             }`}
           >
-            {formatCurrency(pnl.position)}
+            {formatCurrency(pnl.position_pnl)}
           </p>
         </div>
         <div>
           <p className="text-xs text-muted-foreground">Hedge Cost</p>
           <p className="text-sm font-mono tabular-nums text-red-500">
-            {formatCurrency(pnl.hedge)}
+            {formatCurrency(pnl.hedge_cost)}
           </p>
         </div>
       </div>

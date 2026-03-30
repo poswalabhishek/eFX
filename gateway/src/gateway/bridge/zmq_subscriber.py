@@ -1,17 +1,17 @@
 """ZMQ subscriber that connects to the C++ pricing engine.
 
-Receives fair value updates and distributes them to WebSocket clients.
-Runs as an asyncio background task using zmq.asyncio Poller.
+Receives fair value/tick updates, feeds EngineState for aggregation,
+and distributes to WebSocket clients.
 """
 
 import asyncio
 import json
 import logging
-from collections import defaultdict
-from typing import Callable, Awaitable
 
 import zmq
 import zmq.asyncio
+
+from gateway.bridge.engine_state import EngineState
 
 logger = logging.getLogger("efx.bridge")
 
@@ -23,13 +23,14 @@ class ZmqBridge:
 
         self.latest_fair_values: dict[str, dict] = {}
         self.message_count = 0
+        self.state = EngineState()
 
     async def start(self):
         self._running = True
         ctx = zmq.asyncio.Context()
         socket = ctx.socket(zmq.SUB)
         socket.connect(self.engine_address)
-        socket.subscribe(b"")  # subscribe to all topics
+        socket.subscribe(b"")
 
         poller = zmq.asyncio.Poller()
         poller.register(socket, zmq.POLLIN)
@@ -51,11 +52,15 @@ class ZmqBridge:
                     if topic.startswith("fair_value."):
                         pair = data.get("pair", "")
                         self.latest_fair_values[pair] = data
+                        self.state.on_fair_value(data)
+                    elif topic.startswith("tick."):
+                        self.state.on_tick(data)
 
-                    if self.message_count % 500 == 0:
+                    if self.message_count % 1000 == 0:
                         logger.info(
                             f"ZMQ: {self.message_count} msgs, "
-                            f"{len(self.latest_fair_values)} pairs"
+                            f"{len(self.latest_fair_values)} pairs, "
+                            f"PnL=${self.state.pnl.total:,.0f}"
                         )
         except asyncio.CancelledError:
             pass
