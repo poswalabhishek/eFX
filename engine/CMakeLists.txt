@@ -79,6 +79,7 @@ add_library(efx_pricing
     pricing/src/fair_value.cpp
     pricing/src/spread_constructor.cpp
     pricing/src/volatility.cpp
+    pricing/src/client_pricer.cpp
 )
 target_include_directories(efx_pricing PUBLIC pricing/include)
 target_link_libraries(efx_pricing PUBLIC efx_core efx_market_data)

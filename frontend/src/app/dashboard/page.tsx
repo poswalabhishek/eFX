@@ -1,6 +1,7 @@
 "use client";
 
 import { usePrices } from "@/hooks/use-prices";
+import { useClients } from "@/hooks/use-clients";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { PriceTiles } from "@/components/dashboard/price-tiles";
 import { PnlPanel } from "@/components/dashboard/pnl-panel";
@@ -11,6 +12,7 @@ import { AlertFeed } from "@/components/dashboard/alert-feed";
 
 export default function DashboardPage() {
   const { pairs, connected, engineConnected } = usePrices();
+  const { clients, tiers, updateClientTier } = useClients();
 
   return (
     <div className="flex flex-col h-screen">
@@ -29,7 +31,13 @@ export default function DashboardPage() {
           {/* Center column: Live Prices + Client Alpha */}
           <div className="col-span-4 flex flex-col gap-4">
             <PriceTiles prices={pairs} />
-            <ClientAlphaTable />
+            <ClientAlphaTable
+              clients={clients}
+              tiers={tiers}
+              onTierChange={(clientId, tier) =>
+                updateClientTier(clientId, tier, "Manual adjustment from dashboard")
+              }
+            />
           </div>
 
           {/* Right column: Venue Performance + Alerts */}
