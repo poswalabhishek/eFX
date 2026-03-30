@@ -1,0 +1,28 @@
+# Alpha model configuration
+
+[client_alpha]
+horizons_seconds = [1, 5, 10, 30, 60, 300]
+lookback_days = 30
+retrain_time_utc = "22:00"
+min_trades_for_signal = 20
+
+[client_alpha.toxicity_thresholds]
+low = 0.5
+medium = 1.5
+high = 3.0
+extreme = 5.0
+
+[pair_alpha]
+momentum_window_seconds = 300
+mean_reversion_window_seconds = 30
+signal_decay_half_life_seconds = 60
+
+[pair_alpha.regime_detection]
+volatility_lookback_seconds = 3600
+liquidity_lookback_seconds = 600
+regime_change_threshold = 2.0
+
+[spread_adjustment]
+alpha_coefficient = 0.3
+max_skew_bps = 5.0
+asymmetric_widening = true

@@ -1,0 +1,31 @@
+# Tier definitions and spread multipliers
+
+[[tiers]]
+id = "platinum"
+label = "Platinum"
+multiplier = 1.0
+description = "High-value, low-alpha, high-volume clients"
+
+[[tiers]]
+id = "gold"
+label = "Gold"
+multiplier = 1.5
+description = "Good clients, moderate volume"
+
+[[tiers]]
+id = "silver"
+label = "Silver"
+multiplier = 2.5
+description = "Standard clients"
+
+[[tiers]]
+id = "bronze"
+label = "Bronze"
+multiplier = 4.0
+description = "Low volume or mildly toxic"
+
+[[tiers]]
+id = "restricted"
+label = "Restricted"
+multiplier = 8.0
+description = "Highly toxic, under review"

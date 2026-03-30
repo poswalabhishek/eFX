@@ -1,0 +1,45 @@
+# Venue / platform configuration
+
+[[venues]]
+id = "EBS"
+label = "EBS Market"
+venue_type = "primary"
+avg_tick_rate_hz = 100
+base_spread_pips = 0.15
+staleness_threshold_ms = 500
+latency_offset_ms = 2
+reliability = 0.98
+update_rate_ms = 5
+
+[[venues]]
+id = "Reuters"
+label = "Refinitiv Matching"
+venue_type = "primary"
+avg_tick_rate_hz = 80
+base_spread_pips = 0.25
+staleness_threshold_ms = 500
+latency_offset_ms = 3
+reliability = 0.97
+update_rate_ms = 5
+
+[[venues]]
+id = "Hotspot"
+label = "Hotspot FX"
+venue_type = "secondary"
+avg_tick_rate_hz = 40
+base_spread_pips = 0.50
+staleness_threshold_ms = 1000
+latency_offset_ms = 5
+reliability = 0.93
+update_rate_ms = 75
+
+[[venues]]
+id = "Currenex"
+label = "Currenex"
+venue_type = "secondary"
+avg_tick_rate_hz = 25
+base_spread_pips = 0.80
+staleness_threshold_ms = 1500
+latency_offset_ms = 8
+reliability = 0.90
+update_rate_ms = 150

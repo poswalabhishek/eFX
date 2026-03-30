@@ -1,0 +1,51 @@
+# C++ build artifacts
+engine/build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+*.venv/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+questdb-data/
+postgres-data/
+redis-data/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Parquet archives
+data/archive/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# vcpkg
+vcpkg_installed/

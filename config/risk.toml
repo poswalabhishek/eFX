@@ -1,0 +1,27 @@
+# Risk management configuration
+
+[position_limits]
+max_per_pair_usd = 50_000_000
+max_total_exposure_usd = 200_000_000
+
+[drawdown_thresholds]
+warning_usd = -50_000
+critical_usd = -100_000
+emergency_usd = -250_000
+
+[drawdown_rolling]
+window_minutes = 60
+threshold_usd = -100_000
+
+[hedging]
+max_hedge_latency_ms = 100
+default_strategy = "immediate_full"
+
+[inventory_skew]
+skew_factor = 0.5
+max_skew_bps = 2.0
+
+[spread_widening]
+volatility_baseline = 0.065
+volatility_coefficient = 1.5
+low_confidence_multiplier = 2.0

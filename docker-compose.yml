@@ -1,0 +1,42 @@
+services:
+  questdb:
+    image: questdb/questdb:8.2.3
+    container_name: efx-questdb
+    ports:
+      - "9000:9000"   # Web console
+      - "9009:9009"   # InfluxDB line protocol (ILP) ingestion
+      - "8812:8812"   # PostgreSQL wire protocol (SQL queries)
+    volumes:
+      - questdb-data:/var/lib/questdb
+    environment:
+      QDB_TELEMETRY_ENABLED: "false"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: efx-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: efx
+      POSTGRES_USER: efx
+      POSTGRES_PASSWORD: efx_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: efx-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  questdb-data:
+  postgres-data:
+  redis-data:

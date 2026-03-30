@@ -1,0 +1,28 @@
+# Trading session definitions (24h rotation: NY -> Singapore -> London)
+
+[[sessions]]
+id = "new_york"
+label = "New York"
+hub_city = "New York"
+start_utc = "14:00"
+end_utc = "21:00"
+spread_multiplier = 1.2
+focus_pairs = ["EURUSD", "USDJPY", "USDCAD", "GBPUSD", "USDCHF"]
+
+[[sessions]]
+id = "singapore"
+label = "Singapore"
+hub_city = "Singapore"
+start_utc = "21:00"
+end_utc = "06:00"
+spread_multiplier = 1.5
+focus_pairs = ["USDJPY", "AUDUSD", "NZDUSD", "EURJPY", "GBPJPY"]
+
+[[sessions]]
+id = "london"
+label = "London"
+hub_city = "London"
+start_utc = "06:00"
+end_utc = "14:00"
+spread_multiplier = 1.0
+focus_pairs = ["EURUSD", "GBPUSD", "EURGBP", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "EURJPY", "GBPJPY"]

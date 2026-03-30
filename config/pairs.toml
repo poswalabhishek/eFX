@@ -1,0 +1,75 @@
+# Currency pair configuration
+
+[defaults]
+tick_size = 0.00001
+pip_size = 0.00001
+
+[[pairs]]
+symbol = "EURUSD"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "EBS"
+base_spread_pips = 0.2
+
+[[pairs]]
+symbol = "USDJPY"
+pip_size = 0.001
+tick_size = 0.001
+primary_venue = "EBS"
+base_spread_pips = 0.3
+
+[[pairs]]
+symbol = "GBPUSD"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "Reuters"
+base_spread_pips = 0.3
+
+[[pairs]]
+symbol = "AUDUSD"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "Reuters"
+base_spread_pips = 0.4
+
+[[pairs]]
+symbol = "USDCHF"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "EBS"
+base_spread_pips = 0.4
+
+[[pairs]]
+symbol = "USDCAD"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "Reuters"
+base_spread_pips = 0.4
+
+[[pairs]]
+symbol = "NZDUSD"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "Reuters"
+base_spread_pips = 0.5
+
+[[pairs]]
+symbol = "EURGBP"
+pip_size = 0.00001
+tick_size = 0.00001
+primary_venue = "Reuters"
+base_spread_pips = 0.4
+
+[[pairs]]
+symbol = "EURJPY"
+pip_size = 0.001
+tick_size = 0.001
+primary_venue = "EBS"
+base_spread_pips = 0.5
+
+[[pairs]]
+symbol = "GBPJPY"
+pip_size = 0.001
+tick_size = 0.001
+primary_venue = "Reuters"
+base_spread_pips = 0.6
