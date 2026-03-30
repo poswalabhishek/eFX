@@ -39,6 +39,15 @@ FetchContent_Declare(nlohmann_json
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+FetchContent_Declare(cppzmq
+    GIT_REPOSITORY https://github.com/zeromq/cppzmq.git
+    GIT_TAG v4.10.0
+)
+set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZeroMQ REQUIRED IMPORTED_TARGET libzmq)
+FetchContent_MakeAvailable(cppzmq)
+
 FetchContent_Declare(googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG v1.17.0
@@ -74,12 +83,21 @@ add_library(efx_pricing
 target_include_directories(efx_pricing PUBLIC pricing/include)
 target_link_libraries(efx_pricing PUBLIC efx_core efx_market_data)
 
+# Gateway library (ZMQ publisher + QuestDB ILP writer)
+add_library(efx_gateway
+    gateway/src/zmq_publisher.cpp
+    gateway/src/questdb_writer.cpp
+)
+target_include_directories(efx_gateway PUBLIC gateway/include)
+target_link_libraries(efx_gateway PUBLIC efx_core cppzmq PkgConfig::ZeroMQ)
+
 # Main engine executable
 add_executable(efx-engine app/main.cpp)
 target_link_libraries(efx-engine PRIVATE
     efx_core
     efx_market_data
     efx_pricing
+    efx_gateway
     Boost::system
 )
 
