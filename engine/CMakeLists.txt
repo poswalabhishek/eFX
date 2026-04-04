@@ -92,6 +92,13 @@ add_library(efx_order
 target_include_directories(efx_order PUBLIC order/include)
 target_link_libraries(efx_order PUBLIC efx_core efx_pricing)
 
+# Hedger library
+add_library(efx_hedger
+    hedger/src/auto_hedger.cpp
+)
+target_include_directories(efx_hedger PUBLIC hedger/include)
+target_link_libraries(efx_hedger PUBLIC efx_core efx_order efx_market_data)
+
 # Gateway library (ZMQ publisher + QuestDB ILP writer)
 add_library(efx_gateway
     gateway/src/zmq_publisher.cpp
@@ -107,6 +114,7 @@ target_link_libraries(efx-engine PRIVATE
     efx_market_data
     efx_pricing
     efx_order
+    efx_hedger
     efx_gateway
     Boost::system
 )

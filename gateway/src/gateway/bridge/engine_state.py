@@ -40,7 +40,10 @@ class EngineState:
         self.unrealized_pnl: float = 0.0
         self.total_fills: int = 0
         self.total_rejects: int = 0
+        self.total_hedges: int = 0
         self.spread_pnl: float = 0.0
+        self.hedge_cost: float = 0.0
+        self.avg_hedge_slippage: float = 0.0
         self.peak_pnl: float = 0.0
         self.drawdown: float = 0.0
 
@@ -87,11 +90,21 @@ class EngineState:
         self.total_rejects = data.get("total_rejects", 0)
         self._update_drawdown()
 
+    def on_hedge(self, data: dict):
+        """Process a hedge execution from the engine."""
+        venue = data.get("venue", "")
+        if venue in self.venue_stats:
+            self.venue_stats[venue].fill_count += 1
+
     def on_engine_pnl(self, data: dict):
-        """Process PnL update from engine."""
+        """Process decomposed PnL from engine."""
+        self.spread_pnl = data.get("spread_capture", self.spread_pnl)
         self.realized_pnl = data.get("realized_pnl", self.realized_pnl)
         self.unrealized_pnl = data.get("unrealized_pnl", self.unrealized_pnl)
+        self.hedge_cost = data.get("hedge_cost", 0.0)
         self.total_fills = data.get("total_fills", self.total_fills)
+        self.total_hedges = data.get("total_hedges", 0)
+        self.avg_hedge_slippage = data.get("avg_hedge_slippage_bps", 0.0)
         self._update_drawdown()
 
     def _update_drawdown(self):
@@ -138,17 +151,19 @@ class EngineState:
     # ---- Snapshot methods for WebSocket ----
 
     def get_pnl_snapshot(self) -> dict:
-        total = self.realized_pnl + self.unrealized_pnl
+        total = self.spread_pnl + self.hedge_cost + self.realized_pnl + self.unrealized_pnl
         return {
             "type": "pnl",
             "total": round(total, 2),
             "spread_pnl": round(self.spread_pnl, 2),
             "position_pnl": round(self.unrealized_pnl, 2),
-            "hedge_cost": round(self.realized_pnl - self.spread_pnl, 2),
+            "hedge_cost": round(self.hedge_cost, 2),
+            "realized_pnl": round(self.realized_pnl, 2),
             "peak": round(self.peak_pnl, 2),
             "drawdown": round(self.drawdown, 2),
             "total_fills": self.total_fills,
-            "total_rejects": self.total_rejects,
+            "total_hedges": self.total_hedges,
+            "avg_hedge_slippage_bps": round(self.avg_hedge_slippage, 3),
             "timestamp": time.time(),
         }
 

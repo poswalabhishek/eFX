@@ -58,6 +58,8 @@ class ZmqBridge:
                         self.state.on_tick(data)
                     elif topic.startswith("fill."):
                         self.state.on_fill(data)
+                    elif topic.startswith("hedge."):
+                        self.state.on_hedge(data)
                     elif topic == "positions":
                         self.state.on_positions(data)
                     elif topic == "pnl":

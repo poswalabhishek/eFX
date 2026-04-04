@@ -7,6 +7,7 @@
 #include "efx/pricing/client_pricer.hpp"
 #include "efx/order/order_manager.hpp"
 #include "efx/order/client_simulator.hpp"
+#include "efx/hedger/auto_hedger.hpp"
 #include "efx/gateway/zmq_publisher.hpp"
 #include "efx/gateway/questdb_writer.hpp"
 
@@ -48,7 +49,7 @@ int main(int argc, char* argv[]) {
     std::string config_dir = "./config";
     if (argc > 1) config_dir = argv[1];
 
-    spdlog::info("=== EFX Pricing Engine v0.4.0 ===");
+    spdlog::info("=== EFX Pricing Engine v0.5.0 ===");
     auto config = efx::load_config(config_dir);
 
     // Core components
@@ -59,9 +60,11 @@ int main(int argc, char* argv[]) {
     efx::ClientPricer client_pricer(config);
     client_pricer.load_clients(seed_clients());
 
-    // Order management
+    // Order management + hedging + PnL
     efx::PositionManager pos_mgr;
     efx::OrderManager oms(config, pos_mgr);
+    efx::AutoHedger hedger(config);
+    efx::PnlEngine pnl_engine;
     efx::ClientSimulator client_sim(oms, client_pricer);
 
     // Data pipeline
@@ -72,8 +75,11 @@ int main(int argc, char* argv[]) {
     efx::QuestDbWriter qdb_writer(qdb_config);
     qdb_writer.start();
 
-    // Publish fills via ZMQ
+    // Wire fill -> hedge -> PnL pipeline
     oms.set_fill_callback([&](const efx::Fill& fill) {
+        pnl_engine.on_client_fill(fill);
+        hedger.on_client_fill(fill, book);
+
         nlohmann::json j = {
             {"type", "fill"},
             {"trade_id", fill.trade_id},
@@ -89,6 +95,39 @@ int main(int argc, char* argv[]) {
                 fill.wall_time.time_since_epoch()).count()},
         };
         zmq_pub.publish("fill." + fill.pair, j);
+    });
+
+    hedger.set_hedge_callback([&](const efx::HedgeExecution& hedge) {
+        pnl_engine.on_hedge(hedge);
+        pos_mgr.on_fill(efx::Fill{
+            .trade_id = hedge.hedge_id,
+            .quote_id = 0,
+            .client_id = efx::ClientId{"_hedger"},
+            .pair = hedge.pair,
+            .side = hedge.side,
+            .price = hedge.price,
+            .amount = hedge.amount,
+            .venue = hedge.venue,
+            .mid_at_fill = hedge.price,
+            .spread_bps = 0.0,
+            .session = "london",
+            .timestamp = hedge.timestamp,
+            .wall_time = hedge.wall_time,
+        });
+
+        nlohmann::json j = {
+            {"type", "hedge"},
+            {"hedge_id", hedge.hedge_id},
+            {"triggering_trade", hedge.triggering_trade_id},
+            {"pair", hedge.pair},
+            {"side", std::string(efx::to_string(hedge.side))},
+            {"price", hedge.price},
+            {"amount", hedge.amount},
+            {"venue", hedge.venue.id},
+            {"slippage_bps", hedge.slippage_bps},
+            {"latency_us", hedge.latency_us},
+        };
+        zmq_pub.publish("hedge." + hedge.pair, j);
     });
 
     simulator.set_time_step_ms(1.0);
@@ -200,12 +239,24 @@ int main(int argc, char* argv[]) {
             };
             zmq_pub.publish("positions", snapshot);
 
-            // PnL snapshot
+            // Decomposed PnL snapshot
+            pnl_engine.set_position_pnl(pos_mgr.total_realized_pnl(),
+                                        pos_mgr.total_unrealized_pnl());
+            auto pnl_bd = pnl_engine.breakdown();
+            auto hedge_stats = hedger.stats();
+
             nlohmann::json pnl = {
                 {"type", "engine_pnl"},
-                {"realized_pnl", pos_mgr.total_realized_pnl()},
-                {"unrealized_pnl", pos_mgr.total_unrealized_pnl()},
+                {"spread_capture", pnl_bd.spread_capture},
+                {"hedge_cost", pnl_bd.hedge_cost},
+                {"realized_pnl", pnl_bd.realized_pnl},
+                {"unrealized_pnl", pnl_bd.unrealized_pnl},
+                {"net_pnl", pnl_bd.net_pnl()},
                 {"total_fills", oms.total_fills()},
+                {"total_hedges", hedge_stats.total_hedges},
+                {"hedge_slippage_usd", hedge_stats.total_slippage_usd},
+                {"avg_hedge_latency_us", hedge_stats.avg_latency_us},
+                {"avg_hedge_slippage_bps", hedge_stats.avg_slippage_bps},
             };
             zmq_pub.publish("pnl", pnl);
 
@@ -218,10 +269,13 @@ int main(int argc, char* argv[]) {
             double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now - start_time).count() / 1000.0;
 
-            spdlog::info("Ticks:{} ({:.0f}/s) Fills:{} Rejects:{} PnL: realized=${:.0f} unreal=${:.0f}",
+            auto bd = pnl_engine.breakdown();
+            auto hs = hedger.stats();
+            spdlog::info("Ticks:{} ({:.0f}/s) Fills:{} Hedges:{} | spread=${:.0f} hedge=${:.0f} net=${:.0f} | slip={:.2f}bps",
                 total_ticks, total_ticks / elapsed,
-                oms.total_fills(), oms.total_rejects(),
-                pos_mgr.total_realized_pnl(), pos_mgr.total_unrealized_pnl());
+                oms.total_fills(), hs.total_hedges,
+                bd.spread_capture, bd.hedge_cost, bd.net_pnl(),
+                hs.avg_slippage_bps);
 
             last_log_time = now;
         }
