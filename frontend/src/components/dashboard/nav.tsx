@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/clients", label: "Clients & Tiers" },
+  { href: "/sdp", label: "SDP (Client View)" },
 ];
 
 export function DashboardNav() {
