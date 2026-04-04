@@ -35,12 +35,26 @@ export interface AlertData {
   timestamp: number;
 }
 
+export interface FillData {
+  trade_id: number;
+  client_id: string;
+  pair: string;
+  side: string;
+  price: number;
+  amount: number;
+  venue: string;
+  mid_at_fill: number;
+  spread_bps: number;
+  timestamp: number;
+}
+
 interface DashboardState {
   pairs: Record<string, FairValue>;
   pnl: PnlData;
   positions: PositionData[];
   venues: VenueData[];
   alerts: AlertData[];
+  fills: FillData[];
   connected: boolean;
   engineConnected: boolean;
   lastUpdate: number;
@@ -57,6 +71,7 @@ export function useDashboard(): DashboardState {
     positions: [],
     venues: [],
     alerts: [],
+    fills: [],
     connected: false,
     engineConnected: false,
     lastUpdate: 0,
@@ -102,6 +117,7 @@ export function useDashboard(): DashboardState {
             positions: data.positions ?? prev.positions,
             venues: data.venues ?? prev.venues,
             alerts: data.alerts ?? prev.alerts,
+            fills: data.fills ?? prev.fills,
             engineConnected: true,
             lastUpdate: Date.now(),
           }));

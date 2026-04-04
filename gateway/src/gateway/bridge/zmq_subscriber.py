@@ -56,6 +56,12 @@ class ZmqBridge:
                         self.state.on_fair_value(data)
                     elif topic.startswith("tick."):
                         self.state.on_tick(data)
+                    elif topic.startswith("fill."):
+                        self.state.on_fill(data)
+                    elif topic == "positions":
+                        self.state.on_positions(data)
+                    elif topic == "pnl":
+                        self.state.on_engine_pnl(data)
                     elif topic.startswith("client_price."):
                         pair = data.get("pair", "")
                         cid = data.get("client_id", "")
@@ -65,10 +71,12 @@ class ZmqBridge:
                             self.latest_client_prices[pair][cid] = data
 
                     if self.message_count % 1000 == 0:
+                        total_pnl = self.state.realized_pnl + self.state.unrealized_pnl
                         logger.info(
                             f"ZMQ: {self.message_count} msgs, "
                             f"{len(self.latest_fair_values)} pairs, "
-                            f"PnL=${self.state.pnl.total:,.0f}"
+                            f"fills={self.state.total_fills}, "
+                            f"PnL=${total_pnl:,.0f}"
                         )
         except asyncio.CancelledError:
             pass

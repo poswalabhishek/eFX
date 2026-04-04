@@ -34,6 +34,7 @@ async def price_stream(websocket: WebSocket):
                     "positions": _bridge.state.get_positions(),
                     "venues": _bridge.state.get_venue_stats(),
                     "alerts": _bridge.state.get_recent_alerts(10),
+                    "fills": _bridge.state.get_recent_fills(15),
                     "engine_connected": True,
                 }
                 await websocket.send_json(snapshot)

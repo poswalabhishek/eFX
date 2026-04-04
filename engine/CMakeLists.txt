@@ -84,6 +84,14 @@ add_library(efx_pricing
 target_include_directories(efx_pricing PUBLIC pricing/include)
 target_link_libraries(efx_pricing PUBLIC efx_core efx_market_data)
 
+# Order management library
+add_library(efx_order
+    order/src/order_manager.cpp
+    order/src/client_simulator.cpp
+)
+target_include_directories(efx_order PUBLIC order/include)
+target_link_libraries(efx_order PUBLIC efx_core efx_pricing)
+
 # Gateway library (ZMQ publisher + QuestDB ILP writer)
 add_library(efx_gateway
     gateway/src/zmq_publisher.cpp
@@ -98,6 +106,7 @@ target_link_libraries(efx-engine PRIVATE
     efx_core
     efx_market_data
     efx_pricing
+    efx_order
     efx_gateway
     Boost::system
 )
