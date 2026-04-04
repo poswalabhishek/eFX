@@ -22,6 +22,7 @@ class ZmqBridge:
         self._running = False
 
         self.latest_fair_values: dict[str, dict] = {}
+        self.latest_client_prices: dict[str, dict[str, dict]] = {}  # pair -> client_id -> price
         self.message_count = 0
         self.state = EngineState()
 
@@ -55,6 +56,13 @@ class ZmqBridge:
                         self.state.on_fair_value(data)
                     elif topic.startswith("tick."):
                         self.state.on_tick(data)
+                    elif topic.startswith("client_price."):
+                        pair = data.get("pair", "")
+                        cid = data.get("client_id", "")
+                        if pair and cid:
+                            if pair not in self.latest_client_prices:
+                                self.latest_client_prices[pair] = {}
+                            self.latest_client_prices[pair][cid] = data
 
                     if self.message_count % 1000 == 0:
                         logger.info(

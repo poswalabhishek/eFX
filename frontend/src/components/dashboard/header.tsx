@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SessionIndicator } from "./session-indicator";
+import { DashboardNav } from "./nav";
 
 interface HeaderProps {
   engineConnected: boolean;
@@ -20,39 +21,41 @@ export function DashboardHeader({ engineConnected, wsConnected }: HeaderProps) {
   }, []);
 
   return (
-    <header className="border-b bg-card px-6 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-bold tracking-tight">EFX</h1>
-          <span className="text-xs text-muted-foreground">Desk Dashboard</span>
-        </div>
+    <div>
+      <header className="border-b bg-card px-6 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-bold tracking-tight">EFX</h1>
+          </div>
 
-        <div className="flex items-center gap-6">
-          <SessionIndicator />
-          <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-            <span>UTC</span>
-            <span className="font-medium text-foreground">{utcTime}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                engineConnected
-                  ? "bg-emerald-500"
+          <div className="flex items-center gap-6">
+            <SessionIndicator />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+              <span>UTC</span>
+              <span className="font-medium text-foreground">{utcTime}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  engineConnected
+                    ? "bg-emerald-500"
+                    : wsConnected
+                      ? "bg-amber-500"
+                      : "bg-red-500"
+                }`}
+              />
+              <span className="text-xs text-muted-foreground">
+                {engineConnected
+                  ? "Engine Live"
                   : wsConnected
-                    ? "bg-amber-500"
-                    : "bg-red-500"
-              }`}
-            />
-            <span className="text-xs text-muted-foreground">
-              {engineConnected
-                ? "Engine Live"
-                : wsConnected
-                  ? "Gateway Only"
-                  : "Disconnected"}
-            </span>
+                    ? "Gateway Only"
+                    : "Disconnected"}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </header>
+      <DashboardNav />
+    </div>
   );
 }
