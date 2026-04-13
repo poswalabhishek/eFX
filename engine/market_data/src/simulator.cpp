@@ -112,8 +112,10 @@ VenueTick MarketDataSimulator::generate_venue_tick(
 void MarketDataSimulator::step(TickCallback on_tick) {
     evolve_true_prices();
 
-    sim_time_ += std::chrono::microseconds(static_cast<int64_t>(time_step_ms_ * 1000));
-    sim_wall_time_ += std::chrono::microseconds(static_cast<int64_t>(time_step_ms_ * 1000));
+    // Keep quote timestamps aligned with wall/steady clocks used by staleness logic.
+    // Advancing by a fixed step can drift under load and freeze fair-value updates.
+    sim_time_ = Timestamp::clock::now();
+    sim_wall_time_ = WallClock::clock::now();
 
     for (const auto& venue : config_.venues) {
         const auto& vs = venue_states_.at(venue.id);

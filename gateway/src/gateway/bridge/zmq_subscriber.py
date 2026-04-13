@@ -7,6 +7,7 @@ and distributes to WebSocket clients.
 import asyncio
 import json
 import logging
+import time
 
 import zmq
 import zmq.asyncio
@@ -25,6 +26,46 @@ class ZmqBridge:
         self.latest_client_prices: dict[str, dict[str, dict]] = {}  # pair -> client_id -> price
         self.message_count = 0
         self.state = EngineState()
+        self.manual_mode = False
+
+    def set_manual_mode(self, enabled: bool):
+        self.manual_mode = enabled
+        self.state.set_manual_mode(enabled)
+        logger.info("Manual market mode %s", "enabled" if enabled else "disabled")
+
+    def apply_manual_trade_impact(self, pair: str, side: str, amount: float):
+        fv = self.latest_fair_values.get(pair)
+        if not fv:
+            return
+
+        amount_m = max(0.1, abs(amount) / 1_000_000.0)
+        impact_bps = min(12.0, 0.4 * (amount_m ** 0.5))
+        direction = 1.0 if side == "BUY" else -1.0
+        px_mult = 1.0 + direction * impact_bps / 10000.0
+
+        old_mid = float(fv.get("mid", 0.0))
+        if old_mid <= 0:
+            return
+
+        new_mid = old_mid * px_mult
+        new_ts = int(time.time() * 1_000_000)
+
+        fv["mid"] = new_mid
+        fv["timestamp"] = new_ts
+        self.latest_fair_values[pair] = fv
+        self.state.on_fair_value(fv)
+
+        pair_prices = self.latest_client_prices.get(pair, {})
+        for cid, cp in pair_prices.items():
+            bid = float(cp.get("bid", new_mid))
+            ask = float(cp.get("ask", new_mid))
+            spread = max(ask - bid, new_mid * 0.000001)
+            shifted_mid = ((bid + ask) / 2.0) * px_mult
+            cp["bid"] = shifted_mid - spread / 2.0
+            cp["ask"] = shifted_mid + spread / 2.0
+            cp["timestamp"] = new_ts
+            pair_prices[cid] = cp
+        self.latest_client_prices[pair] = pair_prices
 
     async def start(self):
         self._running = True
@@ -49,6 +90,16 @@ class ZmqBridge:
                     topic = parts[0].decode()
                     data = json.loads(parts[1].decode())
                     self.message_count += 1
+
+                    if self.manual_mode and (
+                        topic.startswith("fair_value.")
+                        or topic.startswith("tick.")
+                        or topic.startswith("client_price.")
+                        or topic.startswith("fill.")
+                        or topic == "positions"
+                        or topic == "pnl"
+                    ):
+                        continue
 
                     if topic.startswith("fair_value."):
                         pair = data.get("pair", "")

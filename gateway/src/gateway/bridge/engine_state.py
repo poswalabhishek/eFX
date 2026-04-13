@@ -53,6 +53,12 @@ class EngineState:
         # Alerts
         self.alerts: list[Alert] = []
         self._alert_counter = 0
+        self.manual_mode: bool = False
+        self.latest_fair_values: dict[str, float] = {}
+        self.manual_positions: dict[str, dict] = {}
+
+    def set_manual_mode(self, enabled: bool):
+        self.manual_mode = enabled
 
     def on_tick(self, data: dict):
         venue = data.get("venue", "")
@@ -61,6 +67,11 @@ class EngineState:
             self.venue_stats[venue].last_tick_time = time.time()
 
     def on_fair_value(self, data: dict):
+        pair = data.get("pair")
+        mid = float(data.get("mid", 0.0))
+        if pair and mid > 0:
+            self.latest_fair_values[pair] = mid
+            self._mark_manual_positions_to_market(pair, mid)
         self._check_alerts()
 
     def on_fill(self, data: dict):
@@ -79,10 +90,15 @@ class EngineState:
 
         # Track spread PnL from half-spread capture
         self.spread_pnl += spread_bps * abs(amount) * 0.0001 * 0.5
+        if data.get("venue") == "SDP":
+            self._apply_manual_fill_position(data)
         self._update_venue_rankings()
 
     def on_positions(self, data: dict):
         """Process position snapshot from engine."""
+        if self.manual_mode:
+            return
+
         self.positions = data.get("positions", [])
         self.realized_pnl = data.get("total_realized_pnl", 0.0)
         self.unrealized_pnl = data.get("total_unrealized_pnl", 0.0)
@@ -98,6 +114,9 @@ class EngineState:
 
     def on_engine_pnl(self, data: dict):
         """Process decomposed PnL from engine."""
+        if self.manual_mode:
+            return
+
         self.spread_pnl = data.get("spread_capture", self.spread_pnl)
         self.realized_pnl = data.get("realized_pnl", self.realized_pnl)
         self.unrealized_pnl = data.get("unrealized_pnl", self.unrealized_pnl)
@@ -148,17 +167,94 @@ class EngineState:
         if len(self.alerts) > 100:
             self.alerts = self.alerts[-100:]
 
+    def _apply_manual_fill_position(self, data: dict):
+        pair = data.get("pair")
+        side = data.get("side")
+        if not pair or side not in ("BUY", "SELL"):
+            return
+
+        amount = float(data.get("amount", 0.0))
+        price = float(data.get("price", 0.0))
+        if amount <= 0 or price <= 0:
+            return
+
+        signed_qty = amount if side == "BUY" else -amount
+        pos = self.manual_positions.get(pair, {
+            "pair": pair,
+            "position": 0.0,
+            "avg_entry": 0.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+        })
+
+        cur_pos = float(pos["position"])
+        avg_entry = float(pos["avg_entry"])
+        realized = float(pos["realized_pnl"])
+
+        if cur_pos == 0:
+            cur_pos = signed_qty
+            avg_entry = price
+        elif cur_pos * signed_qty > 0:
+            new_pos = cur_pos + signed_qty
+            avg_entry = (avg_entry * abs(cur_pos) + price * abs(signed_qty)) / abs(new_pos)
+            cur_pos = new_pos
+        else:
+            closing_qty = min(abs(cur_pos), abs(signed_qty))
+            if cur_pos > 0:
+                realized += (price - avg_entry) * closing_qty
+            else:
+                realized += (avg_entry - price) * closing_qty
+
+            remaining = cur_pos + signed_qty
+            if remaining == 0:
+                cur_pos = 0.0
+                avg_entry = 0.0
+            elif cur_pos * remaining > 0:
+                cur_pos = remaining
+            else:
+                cur_pos = remaining
+                avg_entry = price
+
+        pos["position"] = cur_pos
+        pos["avg_entry"] = avg_entry
+        pos["realized_pnl"] = realized
+        mid = self.latest_fair_values.get(pair, price)
+        pos["unrealized_pnl"] = (mid - avg_entry) * cur_pos if cur_pos != 0 else 0.0
+        self.manual_positions[pair] = pos
+
+        if self.manual_mode:
+            self.realized_pnl = sum(p["realized_pnl"] for p in self.manual_positions.values())
+            self.unrealized_pnl = sum(p["unrealized_pnl"] for p in self.manual_positions.values())
+        self._update_drawdown()
+
+    def _mark_manual_positions_to_market(self, pair: str, mid: float):
+        pos = self.manual_positions.get(pair)
+        if not pos:
+            return
+        position = float(pos["position"])
+        avg_entry = float(pos["avg_entry"])
+        pos["unrealized_pnl"] = (mid - avg_entry) * position if position != 0 else 0.0
+        self.manual_positions[pair] = pos
+        if self.manual_mode:
+            self.unrealized_pnl = sum(p["unrealized_pnl"] for p in self.manual_positions.values())
+            self.realized_pnl = sum(p["realized_pnl"] for p in self.manual_positions.values())
+        self._update_drawdown()
+
     # ---- Snapshot methods for WebSocket ----
 
     def get_pnl_snapshot(self) -> dict:
-        total = self.spread_pnl + self.hedge_cost + self.realized_pnl + self.unrealized_pnl
+        manual_realized = sum(p["realized_pnl"] for p in self.manual_positions.values())
+        manual_unrealized = sum(p["unrealized_pnl"] for p in self.manual_positions.values())
+        realized = self.realized_pnl if self.manual_mode else self.realized_pnl + manual_realized
+        unrealized = self.unrealized_pnl if self.manual_mode else self.unrealized_pnl + manual_unrealized
+        total = self.spread_pnl + self.hedge_cost + realized + unrealized
         return {
             "type": "pnl",
             "total": round(total, 2),
             "spread_pnl": round(self.spread_pnl, 2),
-            "position_pnl": round(self.unrealized_pnl, 2),
+            "position_pnl": round(unrealized, 2),
             "hedge_cost": round(self.hedge_cost, 2),
-            "realized_pnl": round(self.realized_pnl, 2),
+            "realized_pnl": round(realized, 2),
             "peak": round(self.peak_pnl, 2),
             "drawdown": round(self.drawdown, 2),
             "total_fills": self.total_fills,
@@ -168,13 +264,40 @@ class EngineState:
         }
 
     def get_positions(self) -> list[dict]:
+        if self.manual_mode:
+            return [
+                {
+                    "pair": p["pair"],
+                    "position": round(p["position"]),
+                    "unrealized_pnl": round(p["unrealized_pnl"], 2),
+                }
+                for p in sorted(self.manual_positions.values(), key=lambda x: x["pair"])
+            ]
+
+        merged: dict[str, dict] = {}
+        for p in self.positions:
+            pair = p.get("pair", "")
+            if not pair:
+                continue
+            merged[pair] = {
+                "pair": pair,
+                "position": float(p.get("position", 0)),
+                "unrealized_pnl": float(p.get("unrealized_pnl", 0)),
+            }
+
+        for pair, p in self.manual_positions.items():
+            row = merged.get(pair, {"pair": pair, "position": 0.0, "unrealized_pnl": 0.0})
+            row["position"] += float(p.get("position", 0.0))
+            row["unrealized_pnl"] += float(p.get("unrealized_pnl", 0.0))
+            merged[pair] = row
+
         return [
             {
-                "pair": p.get("pair", ""),
-                "position": round(p.get("position", 0)),
-                "unrealized_pnl": round(p.get("unrealized_pnl", 0), 2),
+                "pair": p["pair"],
+                "position": round(p["position"]),
+                "unrealized_pnl": round(p["unrealized_pnl"], 2),
             }
-            for p in sorted(self.positions, key=lambda x: x.get("pair", ""))
+            for p in sorted(merged.values(), key=lambda x: x["pair"])
         ]
 
     def get_venue_stats(self) -> list[dict]:

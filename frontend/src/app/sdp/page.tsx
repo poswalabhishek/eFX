@@ -1,17 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useDashboard, type FillData } from "@/hooks/use-prices";
+import { useState, useCallback, useMemo } from "react";
+import { useDashboard } from "@/hooks/use-prices";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SessionIndicator } from "@/components/dashboard/session-indicator";
 import type { FairValue } from "@/types/market";
@@ -27,9 +21,12 @@ const PAIR_ORDER = [
 const AMOUNTS = ["500K", "1M", "2M", "5M", "10M", "25M", "50M"];
 
 function parseAmount(s: string): number {
-  if (s.endsWith("M")) return parseFloat(s) * 1_000_000;
-  if (s.endsWith("K")) return parseFloat(s) * 1_000;
-  return parseFloat(s);
+  const normalized = s.trim().toUpperCase().replaceAll(",", "");
+  if (!normalized) return NaN;
+  if (normalized.endsWith("B")) return parseFloat(normalized) * 1_000_000_000;
+  if (normalized.endsWith("M")) return parseFloat(normalized) * 1_000_000;
+  if (normalized.endsWith("K")) return parseFloat(normalized) * 1_000;
+  return parseFloat(normalized);
 }
 
 interface TradeResult {
@@ -46,11 +43,19 @@ interface TradeResult {
 function PriceTile({
   pair,
   fv,
+  clientBid,
+  clientAsk,
+  clientTier,
+  spreadBps,
   amount,
   onTrade,
 }: {
   pair: string;
   fv: FairValue;
+  clientBid?: number;
+  clientAsk?: number;
+  clientTier?: string;
+  spreadBps?: number;
   amount: string;
   onTrade: (pair: string, side: "BUY" | "SELL") => void;
 }) {
@@ -59,8 +64,8 @@ function PriceTile({
   const pip = isJpy ? 0.001 : 0.00001;
   const halfSpread = 0.2 * pip;
 
-  const bid = fv.mid - halfSpread;
-  const ask = fv.mid + halfSpread;
+  const bid = clientBid ?? (fv.mid - halfSpread);
+  const ask = clientAsk ?? (fv.mid + halfSpread);
 
   const bidStr = bid.toFixed(dec);
   const askStr = ask.toFixed(dec);
@@ -77,7 +82,7 @@ function PriceTile({
           {pair.slice(0, 3)}/{pair.slice(3)}
         </span>
         <span className="text-[10px] text-muted-foreground font-mono">
-          {amount}
+          {amount} {clientTier ? `| ${clientTier}` : ""}
         </span>
       </div>
       <div className="grid grid-cols-2 divide-x">
@@ -102,19 +107,39 @@ function PriceTile({
           </div>
         </button>
       </div>
+      <div className="px-3 py-1 border-t text-[10px] text-muted-foreground font-mono flex items-center justify-between">
+        <span>mid {fv.mid.toFixed(dec)}</span>
+        <span>{(spreadBps ?? (Math.abs(ask - bid) / fv.mid * 10000)).toFixed(2)}bp</span>
+      </div>
     </Card>
   );
 }
 
 export default function SDPPage() {
-  const { pairs, connected, engineConnected } = useDashboard();
+  const { pairs, clientPrices, engineConnected, manualMode } = useDashboard();
   const [selectedAmount, setSelectedAmount] = useState("1M");
+  const [customAmount, setCustomAmount] = useState("");
   const [trades, setTrades] = useState<TradeResult[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [modeBusy, setModeBusy] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
+
+  const activeAmount = useMemo(
+    () => (customAmount.trim() ? customAmount.trim() : selectedAmount),
+    [customAmount, selectedAmount],
+  );
 
   const handleTrade = useCallback(
     async (pair: string, side: "BUY" | "SELL") => {
       if (submitting) return;
+      const amountValue = parseAmount(activeAmount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        setTradeError("Enter a valid amount (e.g. 750K, 3.5M, 12000000).");
+        return;
+      }
+
+      setTradeError(null);
       setSubmitting(true);
       try {
         const res = await fetch(`${API_BASE}/trade/submit`, {
@@ -124,22 +149,44 @@ export default function SDPPage() {
             client_id: CLIENT_ID,
             pair,
             side,
-            amount: parseAmount(selectedAmount),
+            amount: amountValue,
             venue: "SDP",
           }),
         });
         if (res.ok) {
           const result: TradeResult = await res.json();
           setTrades((prev) => [result, ...prev].slice(0, 50));
+        } else {
+          setTradeError("Trade request failed. Please try again.");
         }
       } catch {
-        // ignore
+        setTradeError("Unable to submit trade right now.");
       } finally {
         setSubmitting(false);
       }
     },
-    [selectedAmount, submitting],
+    [activeAmount, submitting],
   );
+
+  const handleModeToggle = useCallback(async () => {
+    if (modeBusy) return;
+    setModeBusy(true);
+    setModeError(null);
+    try {
+      const res = await fetch(`${API_BASE}/simulation/manual-mode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !manualMode }),
+      });
+      if (!res.ok) {
+        setModeError("Failed to switch mode.");
+      }
+    } catch {
+      setModeError("Unable to reach simulation controls.");
+    } finally {
+      setModeBusy(false);
+    }
+  }, [manualMode, modeBusy]);
 
   const activePairs = PAIR_ORDER.filter((p) => pairs[p]);
 
@@ -154,6 +201,15 @@ export default function SDPPage() {
           </div>
           <div className="flex items-center gap-6">
             <SessionIndicator />
+            <Button
+              variant={manualMode ? "destructive" : "outline"}
+              size="sm"
+              className="text-xs"
+              onClick={handleModeToggle}
+              disabled={modeBusy}
+            >
+              {manualMode ? "Manual Market Mode" : "Simulation Mode"}
+            </Button>
             <div className="flex items-center gap-1.5">
               <span className={`h-2 w-2 rounded-full ${engineConnected ? "bg-emerald-500" : "bg-red-500"}`} />
               <span className="text-xs text-muted-foreground">
@@ -176,16 +232,49 @@ export default function SDPPage() {
                   variant={selectedAmount === amt ? "default" : "outline"}
                   size="sm"
                   className="text-xs font-mono"
-                  onClick={() => setSelectedAmount(amt)}
+                  onClick={() => {
+                    setSelectedAmount(amt);
+                    setTradeError(null);
+                  }}
                 >
                   {amt}
                 </Button>
               ))}
             </div>
+            <div className="flex items-center gap-2 ml-3">
+              <Input
+                value={customAmount}
+                onChange={(e) => {
+                  setCustomAmount(e.target.value);
+                  setTradeError(null);
+                }}
+                placeholder="Custom (e.g. 7.5M)"
+                className="w-44 font-mono text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setCustomAmount("")}
+              >
+                Clear
+              </Button>
+            </div>
             <span className="text-xs text-muted-foreground ml-auto">
-              Client: {CLIENT_ID}
+              Client: {CLIENT_ID} | Active: {activeAmount}
             </span>
           </div>
+          {tradeError ? (
+            <p className="text-xs text-red-500 -mt-3">{tradeError}</p>
+          ) : null}
+          {modeError ? (
+            <p className="text-xs text-red-500 -mt-3">{modeError}</p>
+          ) : null}
+          {manualMode ? (
+            <p className="text-xs text-amber-600 -mt-3">
+              Simulation inputs are paused. Your SDP trades now move the market locally.
+            </p>
+          ) : null}
 
           {/* Price tiles grid */}
           {activePairs.length === 0 ? (
@@ -194,15 +283,22 @@ export default function SDPPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-5 gap-3">
-              {activePairs.map((pair) => (
+              {activePairs.map((pair) => {
+                const quote = clientPrices[pair]?.[CLIENT_ID];
+                return (
                 <PriceTile
                   key={pair}
                   pair={pair}
                   fv={pairs[pair]}
-                  amount={selectedAmount}
+                  clientBid={quote?.bid}
+                  clientAsk={quote?.ask}
+                  clientTier={quote?.tier}
+                  spreadBps={quote?.spread_bps}
+                  amount={activeAmount}
                   onTrade={handleTrade}
                 />
-              ))}
+                );
+              })}
             </div>
           )}
 

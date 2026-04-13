@@ -48,6 +48,20 @@ export interface FillData {
   timestamp: number;
 }
 
+export interface ClientPriceData {
+  client_id: string;
+  pair: string;
+  bid: number;
+  ask: number;
+  spread_bps: number;
+  tier: string;
+}
+
+export interface HistoryPoint {
+  ts: number;
+  total: number;
+}
+
 interface DashboardState {
   pairs: Record<string, FairValue>;
   pnl: PnlData;
@@ -55,8 +69,11 @@ interface DashboardState {
   venues: VenueData[];
   alerts: AlertData[];
   fills: FillData[];
+  clientPrices: Record<string, Record<string, ClientPriceData>>;
+  pnlHistory: HistoryPoint[];
   connected: boolean;
   engineConnected: boolean;
+  manualMode: boolean;
   lastUpdate: number;
 }
 
@@ -72,13 +89,17 @@ export function useDashboard(): DashboardState {
     venues: [],
     alerts: [],
     fills: [],
+    clientPrices: {},
+    pnlHistory: [],
     connected: false,
     engineConnected: false,
+    manualMode: false,
     lastUpdate: 0,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
+  const reconnectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -110,21 +131,32 @@ export function useDashboard(): DashboardState {
             }
           }
 
-          setState((prev) => ({
-            ...prev,
-            pairs: prices,
-            pnl: data.pnl ?? prev.pnl,
-            positions: data.positions ?? prev.positions,
-            venues: data.venues ?? prev.venues,
-            alerts: data.alerts ?? prev.alerts,
-            fills: data.fills ?? prev.fills,
-            engineConnected: true,
-            lastUpdate: Date.now(),
-          }));
+          setState((prev) => {
+            const nextPnl = data.pnl ?? prev.pnl;
+            const nextHistory = nextPnl
+              ? [...prev.pnlHistory, { ts: Date.now(), total: nextPnl.total }].slice(-120)
+              : prev.pnlHistory;
+
+            return {
+              ...prev,
+              pairs: prices,
+              pnl: nextPnl,
+              positions: data.positions ?? prev.positions,
+              venues: data.venues ?? prev.venues,
+              alerts: data.alerts ?? prev.alerts,
+              fills: data.fills ?? prev.fills,
+              clientPrices: data.client_prices ?? prev.clientPrices,
+              pnlHistory: nextHistory,
+              engineConnected: true,
+              manualMode: data.manual_mode ?? prev.manualMode,
+              lastUpdate: Date.now(),
+            };
+          });
         } else if (data.type === "heartbeat") {
           setState((prev) => ({
             ...prev,
             engineConnected: data.engine_connected ?? false,
+            manualMode: data.manual_mode ?? prev.manualMode,
           }));
         }
       } catch {
@@ -137,13 +169,17 @@ export function useDashboard(): DashboardState {
       if (retriesRef.current < 20) {
         retriesRef.current++;
         const delay = Math.min(1000 * Math.pow(1.5, retriesRef.current), 10000);
-        setTimeout(connect, delay);
+        setTimeout(() => reconnectRef.current(), delay);
       }
     };
 
     ws.onerror = () => ws.close();
     wsRef.current = ws;
   }, []);
+
+  useEffect(() => {
+    reconnectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     connect();

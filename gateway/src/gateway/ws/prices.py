@@ -30,12 +30,14 @@ async def price_stream(websocket: WebSocket):
                     "type": "dashboard",
                     "timestamp": time.time(),
                     "prices": _bridge.latest_fair_values,
+                    "client_prices": _bridge.latest_client_prices,
                     "pnl": _bridge.state.get_pnl_snapshot(),
                     "positions": _bridge.state.get_positions(),
                     "venues": _bridge.state.get_venue_stats(),
                     "alerts": _bridge.state.get_recent_alerts(10),
                     "fills": _bridge.state.get_recent_fills(15),
                     "engine_connected": True,
+                    "manual_mode": _bridge.manual_mode,
                 }
                 await websocket.send_json(snapshot)
             else:
@@ -43,6 +45,7 @@ async def price_stream(websocket: WebSocket):
                     "type": "heartbeat",
                     "timestamp": time.time(),
                     "engine_connected": _bridge is not None and _bridge.message_count > 0,
+                    "manual_mode": _bridge.manual_mode if _bridge else False,
                 })
             await asyncio.sleep(0.1)
     except WebSocketDisconnect:

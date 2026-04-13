@@ -87,6 +87,8 @@ async def submit_trade(req: TradeRequest):
         "timestamp": time.time() * 1e6,
     }
     _bridge.state.on_fill(fill_data)
+    if _bridge.manual_mode:
+        _bridge.apply_manual_trade_impact(req.pair, req.side, req.amount)
 
     logger.info(f"SDP trade: {req.client_id} {req.side} {req.amount:,.0f} {req.pair} @ {price:.5f}")
 
